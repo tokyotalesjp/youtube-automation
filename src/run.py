@@ -72,7 +72,10 @@ def main() -> int:
                 dur = tts_kokoro.synth_line(scene["narration"], str(wav_dir / f"line{i:02d}.wav"))
                 scene["duration"] = dur
             out_path = str(Path(tmp) / "video.mp4")
-            srt_path = build_video.build(scenes, str(wav_dir), str(Path(tmp) / "build"), out_path)
+            srt_path = build_video.build(
+                scenes, str(wav_dir), str(Path(tmp) / "build"), out_path,
+                verdict=script.get("verdict", "HALF HYPE"),
+            )
 
             video_id = upload.upload_video(
                 out_path, script["title"], script["description"],
