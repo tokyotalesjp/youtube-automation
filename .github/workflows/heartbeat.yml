@@ -1,0 +1,32 @@
+name: heartbeat
+
+# Daily activity commit: GitHub auto-disables scheduled workflows in
+# repos with no activity for 60 days, so this keeps a daily pulse and
+# leaves a visible activity trail.
+
+on:
+  schedule:
+    - cron: "3 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  beat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Append heartbeat line
+        run: |
+          mkdir -p logs
+          date -u +"%Y-%m-%dT%H:%M:%SZ heartbeat" >> logs/heartbeat.log
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/heartbeat.log
+          git commit -m "heartbeat: daily activity log" || echo "nothing to commit"
+          git push

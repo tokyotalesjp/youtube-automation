@@ -9,9 +9,12 @@ on:
         required: true
         type: choice
         options: [unlisted, private, public]
-  # 段階2で有効化する（60日無活動での自動無効化を避けるため、段階2では日次ログ記録も入れる）
-  # schedule:
-  #   - cron: "17 0 * * *"
+  # Stage 2: 4 runs/day (UTC) = 09:17 / 15:17 / 21:17 / 03:17 JST.
+  # Each run processes ONE queued row, so the queue drains at up to
+  # 4 videos/day. The separate heartbeat workflow keeps the repo active
+  # so GitHub does not auto-disable schedules after 60 days.
+  schedule:
+    - cron: "17 0,6,12,18 * * *"
 
 jobs:
   produce:
@@ -44,6 +47,7 @@ jobs:
           YT_WEB_CLIENT_SECRET: ${{ secrets.YT_WEB_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-3.6-flash
           QUEUE_SHEET_ID: ${{ secrets.QUEUE_SHEET_ID }}
           UPLOAD_PRIVACY: ${{ inputs.privacy || 'unlisted' }}
         run: python src/run.py
