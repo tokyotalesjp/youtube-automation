@@ -48,6 +48,9 @@ jobs:
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-3.6-flash
+          # Hype-r Report narrator: high-energy male voice, slightly fast.
+          TTS_VOICE: am_puck
+          TTS_SPEED: "1.08"
           QUEUE_SHEET_ID: ${{ secrets.QUEUE_SHEET_ID }}
           UPLOAD_PRIVACY: ${{ inputs.privacy || 'unlisted' }}
         run: python src/run.py
