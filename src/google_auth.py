@@ -14,14 +14,19 @@ def refresh_access_token(refresh_token: str) -> str:
     resp = requests.post(
         TOKEN_URL,
         data={
-            "client_id": os.environ["YT_WEB_CLIENT_ID"],
-            "client_secret": os.environ["YT_WEB_CLIENT_SECRET"],
-            "refresh_token": refresh_token,
+            "client_id": os.environ["YT_WEB_CLIENT_ID"].strip(),
+            "client_secret": os.environ["YT_WEB_CLIENT_SECRET"].strip(),
+            "refresh_token": refresh_token.strip(),
             "grant_type": "refresh_token",
         },
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        # Google's error body carries only an error code and description
+        # (never credential values), so it is safe to surface in the logs.
+        raise RuntimeError(
+            f"Token refresh failed: HTTP {resp.status_code}: {resp.text}"
+        )
     return resp.json()["access_token"]
 
 
