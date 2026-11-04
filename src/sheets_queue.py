@@ -45,6 +45,47 @@ def next_queued() -> dict | None:
     return None
 
 
+CONTROL_TAB = "control"
+
+
+def read_control() -> dict:
+    """Read the control tab (column A = key, column B = value).
+    Returns {key: (sheet_row_number, value)}."""
+    svc = _service()
+    result = (
+        svc.spreadsheets()
+        .values()
+        .get(spreadsheetId=os.environ["QUEUE_SHEET_ID"], range=f"{CONTROL_TAB}!A1:B50")
+        .execute()
+    )
+    out = {}
+    for i, raw in enumerate(result.get("values", []), start=1):
+        if raw and raw[0].strip():
+            out[raw[0].strip()] = (i, raw[1] if len(raw) > 1 else "")
+    return out
+
+
+def write_control(key: str, value: str) -> None:
+    svc = _service()
+    existing = read_control()
+    if key in existing:
+        row_no = existing[key][0]
+    else:
+        row_no = len(existing) + 1
+        svc.spreadsheets().values().update(
+            spreadsheetId=os.environ["QUEUE_SHEET_ID"],
+            range=f"{CONTROL_TAB}!A{row_no}",
+            valueInputOption="RAW",
+            body={"values": [[key]]},
+        ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=os.environ["QUEUE_SHEET_ID"],
+        range=f"{CONTROL_TAB}!B{row_no}",
+        valueInputOption="RAW",
+        body={"values": [[value]]},
+    ).execute()
+
+
 def update_row(row_number: int, **fields: str) -> None:
     """fields keys must be column headers, e.g. status=..., title=..., video_url=..."""
     headers = ["id", "topic", "method", "language", "status", "title", "video_url", "created_at", "notes"]

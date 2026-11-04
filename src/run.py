@@ -8,6 +8,7 @@ workflow run itself is visibly failed (Stage 2 adds auto-stop on repeats).
 import os
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -20,7 +21,34 @@ import tts_kokoro
 import upload
 
 
+def _control_value(control: dict, key: str, default: str = "") -> str:
+    return str(control.get(key, (0, default))[1]).strip()
+
+
 def main() -> int:
+    # --- Safety devices (Stage 2): emergency stop + consecutive-failure auto-stop.
+    # Both live in the spreadsheet's "control" tab so the owner can flip them
+    # from any browser/phone without touching code.
+    try:
+        control = sheets_queue.read_control()
+    except Exception as ctl_err:
+        print(f"Control tab unreadable, continuing without safety flags: {ctl_err}")
+        control = {}
+    if _control_value(control, "emergency_stop", "0").lower() in ("1", "true", "stop", "yes"):
+        print("EMERGENCY STOP is set in the control tab. Exiting without processing.")
+        return 0
+    try:
+        fail_limit = int(_control_value(control, "consecutive_failure_limit", "3") or 3)
+        fail_count = int(_control_value(control, "consecutive_failures", "0") or 0)
+    except ValueError:
+        fail_limit, fail_count = 3, 0
+    if fail_count >= fail_limit:
+        print(
+            f"AUTO-STOP: {fail_count} consecutive failures reached the limit of "
+            f"{fail_limit}. Reset 'consecutive_failures' in the control tab to resume."
+        )
+        return 0
+
     row = sheets_queue.next_queued()
     if row is None:
         print("No queued rows. Nothing to do.")
@@ -50,16 +78,30 @@ def main() -> int:
                 out_path, script["title"], script["description"],
                 privacy=privacy, language=language,
             )
-            try:
-                upload.upload_captions(video_id, srt_path, language=language)
-            except Exception as cap_err:  # captions are best-effort in Stage 1
-                print(f"Caption upload failed (continuing): {cap_err}")
+            # Captions are best-effort but retried: a transient 503 killed
+            # them in the Stage 1 proof run.
+            for attempt, wait in enumerate((0, 5, 15, 45), start=1):
+                if wait:
+                    time.sleep(wait)
+                try:
+                    upload.upload_captions(video_id, srt_path, language=language)
+                    print(f"Captions uploaded (attempt {attempt}).")
+                    break
+                except Exception as cap_err:
+                    print(f"Caption upload attempt {attempt} failed: {cap_err}")
+            else:
+                print("Caption upload gave up after all retries (continuing).")
 
         url = f"https://youtu.be/{video_id}"
         sheets_queue.update_row(
             row_no, status="done", title=script["title"], video_url=url,
             notes=f"privacy={privacy}",
         )
+        if fail_count:
+            try:
+                sheets_queue.write_control("consecutive_failures", "0")
+            except Exception:
+                pass
         print(f"Done: {url}")
         return 0
     except Exception:
@@ -67,6 +109,10 @@ def main() -> int:
         print(err)
         try:
             sheets_queue.update_row(row_no, status="error", notes=err[-400:])
+        except Exception:
+            pass
+        try:
+            sheets_queue.write_control("consecutive_failures", str(fail_count + 1))
         except Exception:
             pass
         return 1
