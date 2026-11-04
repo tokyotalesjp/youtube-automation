@@ -1,0 +1,49 @@
+name: produce-one-video
+
+on:
+  workflow_dispatch:
+    inputs:
+      privacy:
+        description: "Upload privacy (unlisted for tests, public for production)"
+        default: "unlisted"
+        required: true
+        type: choice
+        options: [unlisted, private, public]
+  # 段階2で有効化する（60日無活動での自動無効化を避けるため、段階2では日次ログ記録も入れる）
+  # schedule:
+  #   - cron: "17 0 * * *"
+
+jobs:
+  produce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+
+      - name: Install python deps
+        run: pip install -r requirements.txt
+
+      - name: Download Kokoro models
+        run: |
+          mkdir -p models
+          curl -L -o models/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+          curl -L -o models/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+
+      - name: Run pipeline
+        env:
+          YT_WEB_CLIENT_ID: ${{ secrets.YT_WEB_CLIENT_ID }}
+          YT_WEB_CLIENT_SECRET: ${{ secrets.YT_WEB_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          QUEUE_SHEET_ID: ${{ secrets.QUEUE_SHEET_ID }}
+          UPLOAD_PRIVACY: ${{ inputs.privacy || 'unlisted' }}
+        run: python src/run.py
